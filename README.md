@@ -19,7 +19,12 @@ Max Jin, Evaline Ju, Abhinand Sukumar
 
 ## Schedule
 
-
+1.	All sensors sensing by end of March
+2.	Sensors put in locations in the car that still give useful information by end of March
+3.	Node communication by end of March
+4.	Integration of all nodes in the system by end of April
+5.	Ability to call emergency phone by end of April
+6.	Phone application by end of April
 
 ## License
 
