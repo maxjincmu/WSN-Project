@@ -7,11 +7,11 @@ According to the safety organization Kids and Cars, an average of 37 kids die ea
 
 ## Installation
 
-We will add code
+We will add code after we get parts.
 
 ## Tests
 
-We will add tests
+We will add tests after we write code. 
 
 ## Contributors
 
