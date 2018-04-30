@@ -1,0 +1,40 @@
+<resources>
+    <string name="app_name">My Little Angel</string>
+    <string name="img_process_text">Part 2</string>
+    <string name="snd_process_text">Part 1</string>
+    <string name="home">Home</string>
+    <string name="cancel">Cancel</string>
+    <string name="load_img">Load Image</string>
+    <string name="load_snd">Load Sound</string>
+    <string name="title_activity_img_processing">img_processing</string>
+    <string name="title_activity_snd_processing">snd_processing</string>
+    <string name="title_activity_list_display">ListDisplay</string>
+    <string name="title_activity_info">Information</string>
+    <string name="title_activity_babydetect">BabyDetectActivity</string>
+    <string name="title_activity_contact">Contacts</string>
+    <string name="title_activity_devicescan">DeviceScanActivity</string>
+
+    <string name="ble_not_supported">BLE is not supported</string>
+    <string name="label_data">Data:</string>
+    <string name="label_device_address">Device address:</string>
+    <string name="label_state">State:</string>
+    <string name="no_data">No data</string>
+    <string name="connected">Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="title_devices">BLE Device Scan</string>
+    <string name="error_bluetooth_not_supported">Bluetooth not supported.</string>
+
+    <string name="unknown_device">Unknown device</string>
+    <string name="unknown_characteristic">Unknown characteristic</string>
+    <string name="unknown_service">Unknown service</string>
+
+    <!-- Menu items -->
+    <string name="menu_connect">Connect</string>
+    <string name="menu_disconnect">Disconnect</string>
+    <string name="menu_scan">Scan</string>
+    <string name="menu_stop">Stop</string>
+
+    <string name="title">Contact Details</string>
+    <string name="name">Name</string>
+    <string name="runs">Number</string>
+</resources>
