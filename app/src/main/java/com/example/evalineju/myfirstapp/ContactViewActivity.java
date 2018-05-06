@@ -20,10 +20,7 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.Manifest;
-import android.support.design.widget.Snackbar;
-import android.support.v4.app.ActivityCompat;
 import android.util.Log;
-import android.support.annotation.NonNull;
 
 public class ContactViewActivity extends ListActivity {
 

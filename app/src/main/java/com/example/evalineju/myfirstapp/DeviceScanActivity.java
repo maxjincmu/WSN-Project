@@ -68,6 +68,7 @@ public class DeviceScanActivity extends ListActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        Log.d(TAG, "Creating");
         super.onCreate(savedInstanceState);
         getActionBar().setTitle(R.string.title_devices);
         mHandler = new Handler();
@@ -169,6 +170,7 @@ public class DeviceScanActivity extends ListActivity {
 
     @Override
     protected void onResume() {
+        Log.d(TAG, "Resuming");
         super.onResume();
 
         // Ensures Bluetooth is enabled on the device.  If Bluetooth is not currently enabled,
@@ -218,22 +220,9 @@ public class DeviceScanActivity extends ListActivity {
         startActivity(intent);
     }*/
 
-    protected void automaticConnect() {
-        Log.d(TAG, "Trying to automatically connect.");
-        final BluetoothDevice device = mLeDeviceListAdapter.getDevice(0);
-        if (device == null) return; //change this to account for 0 devices
-        final Intent intent = new Intent(this, DeviceControlActivity.class);
-        intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_NAME, device.getName());
-        intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_ADDRESS, device.getAddress());
-        if (mScanning) {
-            //mBluetoothAdapter.stopLeScan(mLeScanCallback);
-            mBluetoothLeScanner.stopScan(mLeScanCallback);
-            mScanning = false;
-        }
-        startActivity(intent);
-    }
-
     private void scanLeDevice(final boolean enable) {
+        int numDevices = 0;
+        Log.d(TAG, "Scanning again!");
         if (enable) {
             // Stops scanning after a pre-defined scan period.
             mHandler.postDelayed(new Runnable() {
@@ -253,8 +242,7 @@ public class DeviceScanActivity extends ListActivity {
                     .build();
             // Comment out here for not specifically trying to get the raspberrypi
             filters = new ArrayList<ScanFilter>();
-            //ScanFilter scanFilter = new ScanFilter.Builder().setDeviceAddress("B8:27:EB:6B:DF:8A").build();
-            ScanFilter scanFilter = new ScanFilter.Builder().setDeviceAddress("68:9E:19:CB:F2:24").build();
+            ScanFilter scanFilter = new ScanFilter.Builder().setDeviceAddress("B8:27:EB:6B:DF:8A").build();
             filters.add(scanFilter);
             //
             mBluetoothLeScanner.startScan(filters, settings, mLeScanCallback);
@@ -265,12 +253,26 @@ public class DeviceScanActivity extends ListActivity {
             mBluetoothLeScanner.stopScan(mLeScanCallback);
         }
         invalidateOptionsMenu();
+    }
 
-        Log.d(TAG, String.format("Found %d devices", mLeDeviceListAdapter.getCount()));
-        //Automatically try launch device control activity to try to connect here
-        if (mLeDeviceListAdapter.getCount() == 1) {
-            automaticConnect();
-        } //else ALERT
+    protected void automaticConnect(int numDevices) {
+        Log.d(TAG, "Trying to automatically connect.");
+        final Intent intent = new Intent(this, DeviceControlActivity.class);
+        if (numDevices == 1) { // DEVICE FOUND - IN RANGE
+            final BluetoothDevice device = mLeDeviceListAdapter.getDevice(0);
+            //if (device == null) return;
+            intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_NAME, device.getName());
+            intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_ADDRESS, device.getAddress());
+        } else if (numDevices == 0) { // NO DEVICE FOUND - OUT OF RANGE
+            intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_NAME, "NO DEVICE");
+            intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_ADDRESS, "NO DEVICE ADDRESS");
+        }
+        if (mScanning) {
+            //mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            mBluetoothLeScanner.stopScan(mLeScanCallback);
+            mScanning = false;
+        }
+        startActivity(intent);
     }
 
     // Adapter for holding devices found through scanning.
@@ -363,8 +365,17 @@ public class DeviceScanActivity extends ListActivity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+                            Log.d(TAG, "Added device");
                             mLeDeviceListAdapter.addDevice(result.getDevice());
+                            Log.d(TAG, result.toString());
                             mLeDeviceListAdapter.notifyDataSetChanged();
+                            int numDevices = mLeDeviceListAdapter.getCount();
+                            Log.d(TAG, String.format("Found %d devices", numDevices));
+                            //Automatically try launch device control activity to try to connect here
+                            if ((numDevices == 0) || (numDevices == 1)) {
+                            //if (numDevices == 1) {
+                                automaticConnect(numDevices);
+                            }
                         }
                     });
                 }

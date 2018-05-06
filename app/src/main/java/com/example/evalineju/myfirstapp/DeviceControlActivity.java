@@ -17,17 +17,28 @@ package com.example.evalineju.myfirstapp;
  */
 
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.CountDownTimer;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
+import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -35,6 +46,7 @@ import android.view.View;
 import android.widget.ExpandableListView;
 import android.widget.SimpleExpandableListAdapter;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -62,6 +74,11 @@ public class DeviceControlActivity extends Activity {
             new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
     private boolean mConnected = false;
     private BluetoothGattCharacteristic mNotifyCharacteristic;
+    private boolean prevBabyPresent = false;
+    private int scanRounds = 0;
+    private Handler m_Handler;
+    private Handler handler = new Handler();
+    private int delay = 1000; //milliseconds
 
     private final String LIST_NAME = "NAME";
     private final String LIST_UUID = "UUID";
@@ -83,6 +100,8 @@ public class DeviceControlActivity extends Activity {
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
             mBluetoothLeService = null;
+            handler.removeCallbacksAndMessages(null);
+            finish(); //GO BACK TO SCANNING ACTIVITY IMMEDIATELY
         }
     };
 
@@ -101,15 +120,42 @@ public class DeviceControlActivity extends Activity {
                 updateConnectionState(R.string.connected);
                 invalidateOptionsMenu();
             } else if (BluetoothLeService.ACTION_GATT_DISCONNECTED.equals(action)) {
+                Log.d(TAG, "Disconnected...");
                 mConnected = false;
                 updateConnectionState(R.string.disconnected);
                 invalidateOptionsMenu();
                 clearUI();
+                handler.removeCallbacksAndMessages(null);
+                Log.d(TAG, String.format("Prev baby value: %b", prevBabyPresent));
+                if (prevBabyPresent) {
+                    Log.d(TAG, "Launch alert");
+                    // launch alert
+                    m_Handler = new Handler(Looper.getMainLooper()) {
+
+                        @Override
+                        public void handleMessage(Message message) {
+                            launchAlert();
+                        }
+                    };
+                    Message message = m_Handler.obtainMessage();
+                    message.sendToTarget();
+                } else {
+                    finish();
+                }
             } else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
                 // Show all the supported services and characteristics on the user interface.
                 displayGattServices(mBluetoothLeService.getSupportedGattServices());
             } else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
-                displayData(intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
+                String data = intent.getStringExtra(BluetoothLeService.EXTRA_DATA);
+                displayData(data);
+                Log.d(TAG, "NEW DATA: " + data);
+                //TODO: UPDATE PREVBABYPRESENT HERE WITH NEW DATA - COMMENT OUT ALL OTHER BROADCAST
+                if (data.indexOf("1") != -1) { //baby now present
+                    prevBabyPresent = true;
+                } else if (data.indexOf("0") != -1) {
+                    prevBabyPresent = false;
+                }
+                Log.d(TAG, String.format("Prev baby value after new data: %b", prevBabyPresent));
             }
         }
     };
@@ -124,6 +170,8 @@ public class DeviceControlActivity extends Activity {
                 public boolean onChildClick(ExpandableListView parent, View v, int groupPosition,
                                             int childPosition, long id) {
                     if (mGattCharacteristics != null) {
+                        Log.d(TAG, String.format("Group position: %d", groupPosition));
+                        Log.d(TAG, String.format("Child position: %d", childPosition));
                         final BluetoothGattCharacteristic characteristic =
                                 mGattCharacteristics.get(groupPosition).get(childPosition);
                         final int charaProp = characteristic.getProperties();
@@ -156,23 +204,84 @@ public class DeviceControlActivity extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (savedInstanceState != null) {
+            prevBabyPresent = savedInstanceState.getBoolean("prevBabyPresent");
+            scanRounds = savedInstanceState.getInt("scanRounds");
+            Log.d(TAG, "Found previous baby state");
+        }
         setContentView(R.layout.gatt_services_characteristics);
 
         final Intent intent = getIntent();
         mDeviceName = intent.getStringExtra(EXTRAS_DEVICE_NAME);
         mDeviceAddress = intent.getStringExtra(EXTRAS_DEVICE_ADDRESS);
 
-        // Sets up UI references.
-        ((TextView) findViewById(R.id.device_address)).setText(mDeviceAddress);
-        mGattServicesList = (ExpandableListView) findViewById(R.id.gatt_services_list);
-        mGattServicesList.setOnChildClickListener(servicesListClickListner);
-        mConnectionState = (TextView) findViewById(R.id.connection_state);
-        mDataField = (TextView) findViewById(R.id.data_value);
+        Log.d(TAG, "Device name " + mDeviceName);
+        if (mDeviceName == null || mDeviceName.isEmpty()) {
+            finish();
+        }
 
-        getActionBar().setTitle(mDeviceName);
-        getActionBar().setDisplayHomeAsUpEnabled(true);
-        Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
-        bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
+        if (!mDeviceName.equals("NO DEVICE")) { //IN RANGE - CONNECT
+            scanRounds = 0;
+            Log.d(TAG, "Device in range");
+            // Sets up UI references.
+            ((TextView) findViewById(R.id.device_address)).setText(mDeviceAddress);
+            mGattServicesList = (ExpandableListView) findViewById(R.id.gatt_services_list);
+            mGattServicesList.setOnChildClickListener(servicesListClickListner);
+            mConnectionState = (TextView) findViewById(R.id.connection_state);
+            mDataField = (TextView) findViewById(R.id.data_value);
+
+            getActionBar().setTitle(mDeviceName);
+            getActionBar().setDisplayHomeAsUpEnabled(true);
+            Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
+            bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
+
+            handler.postDelayed(new Runnable(){
+                public void run(){
+                    Log.d(TAG, "read method");
+                    if (mGattCharacteristics.size() >= 3 && mBluetoothLeService != null) {
+                        int groupPosition = 2;
+                        int childPosition = 0;
+                        final BluetoothGattCharacteristic characteristic =
+                                mGattCharacteristics.get(groupPosition).get(childPosition);
+                        final int charaProp = characteristic.getProperties();
+                        if ((charaProp | BluetoothGattCharacteristic.PROPERTY_READ) > 0) {
+                            // If there is an active notification on a characteristic, clear
+                            // it first so it doesn't update the data field on the user interface.
+                            if (mNotifyCharacteristic != null) {
+                                mBluetoothLeService.setCharacteristicNotification(
+                                        mNotifyCharacteristic, false);
+                                mNotifyCharacteristic = null;
+                            }
+                            mBluetoothLeService.readCharacteristic(characteristic);
+                        }
+                        if ((charaProp | BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0) {
+                            mNotifyCharacteristic = characteristic;
+                            mBluetoothLeService.setCharacteristicNotification(
+                                    characteristic, true);
+                        }
+                    }
+                    handler.postDelayed(this, delay);
+                }
+            }, delay);
+
+        } else { // OUT OF RANGE
+            handler.removeCallbacksAndMessages(null);
+            Log.d(TAG, "Device out of range");
+            // check prev state
+            if (prevBabyPresent) {
+                Log.d(TAG, "Launch alert");
+                // launch alert
+                launchAlert();
+            }
+            finish();
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean("prevBabyPresent", prevBabyPresent);
+        outState.putInt("scanRounds", scanRounds);
+        super.onSaveInstanceState(outState);
     }
 
     @Override
@@ -194,7 +303,9 @@ public class DeviceControlActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        unbindService(mServiceConnection);
+        if (!mDeviceName.equals("NO DEVICE")) {
+            unbindService(mServiceConnection);
+        }
         mBluetoothLeService = null;
     }
 
@@ -219,6 +330,22 @@ public class DeviceControlActivity extends Activity {
                 return true;
             case R.id.menu_disconnect:
                 mBluetoothLeService.disconnect();
+                handler.removeCallbacksAndMessages(null);
+                if (prevBabyPresent) {
+                    Log.d(TAG, "Launch alert");
+                    // launch alert
+                    m_Handler = new Handler(Looper.getMainLooper()) {
+
+                        @Override
+                        public void handleMessage(Message message) {
+                            launchAlert();
+                        }
+                    };
+                    Message message = m_Handler.obtainMessage();
+                    message.sendToTarget();
+                } else {
+                    finish();
+                }
                 return true;
             case android.R.id.home:
                 onBackPressed();
@@ -297,6 +424,29 @@ public class DeviceControlActivity extends Activity {
                 new int[] { android.R.id.text1, android.R.id.text2 }
         );
         mGattServicesList.setAdapter(gattServiceAdapter);
+
+        if (mGattCharacteristics != null) {
+            int groupPosition = 2;
+            int childPosition = 0;
+            final BluetoothGattCharacteristic characteristic =
+                    mGattCharacteristics.get(groupPosition).get(childPosition);
+            final int charaProp = characteristic.getProperties();
+            if ((charaProp | BluetoothGattCharacteristic.PROPERTY_READ) > 0) {
+                // If there is an active notification on a characteristic, clear
+                // it first so it doesn't update the data field on the user interface.
+                if (mNotifyCharacteristic != null) {
+                    mBluetoothLeService.setCharacteristicNotification(
+                            mNotifyCharacteristic, false);
+                    mNotifyCharacteristic = null;
+                }
+                mBluetoothLeService.readCharacteristic(characteristic);
+            }
+            if ((charaProp | BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0) {
+                mNotifyCharacteristic = characteristic;
+                mBluetoothLeService.setCharacteristicNotification(
+                        characteristic, true);
+            }
+        }
     }
 
     private static IntentFilter makeGattUpdateIntentFilter() {
@@ -306,5 +456,98 @@ public class DeviceControlActivity extends Activity {
         intentFilter.addAction(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
         intentFilter.addAction(BluetoothLeService.ACTION_DATA_AVAILABLE);
         return intentFilter;
+    }
+
+    // Launch the alert to ask if ok
+    private void launchAlert(){
+        final AlertDialog alertViewer = new AlertDialog.Builder(DeviceControlActivity.this).create();
+        alertViewer.setTitle("Baby Detected");
+        alertViewer.setMessage("You may have left someone behind!");
+        // make a 10 second countdown timer
+        final CountDownTimer checkin = new CountDownTimer(10000, 1000) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+            }
+
+            @Override
+            public void onFinish() {
+                alertViewer.dismiss();
+                ////sendSMS(phoneNumber, lastmessage);
+                makeCall();
+            }
+        };
+        checkin.start();
+
+        // set dialog message
+        alertViewer.setButton(AlertDialog.BUTTON_NEUTRAL, "Everything's fine!",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                        ////sendSMS(phoneNumber, okmessage);
+                        checkin.cancel();
+                        alertViewer.dismiss();
+                        //finish();
+                    }
+                });
+        alertViewer.show();
+    }
+
+    private void dismissDialog(AlertDialog dialog) {
+        Log.d(TAG, "Dismissing Dialog");
+        if (dialog != null && dialog.isShowing()) {
+            dialog.dismiss();
+        }
+    }
+
+    public void makeCall() {
+        if(isPermissionGranted()) {
+            call_action();
+        }
+    }
+
+    public void call_action() {
+        Intent callIntent = new Intent(Intent.ACTION_CALL);
+        callIntent.setData(Uri.parse("tel:14088342964"));
+        if (ActivityCompat.checkSelfPermission(DeviceControlActivity.this,
+                Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        startActivity(callIntent);
+    }
+
+    public  boolean isPermissionGranted() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (checkSelfPermission(android.Manifest.permission.CALL_PHONE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                Log.v("TAG","Permission is granted");
+                return true;
+            } else {
+
+                Log.v("TAG","Permission is revoked");
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE}, 1);
+                return false;
+            }
+        }
+        else { //permission is automatically granted on sdk<23 upon installation
+            Log.v("TAG","Permission is granted");
+            return true;
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case 1: {
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(getApplicationContext(), "Permission granted", Toast.LENGTH_SHORT).show();
+                    call_action();
+                } else {
+                    Toast.makeText(getApplicationContext(), "Permission denied", Toast.LENGTH_SHORT).show();
+                }
+                return;
+            }
+        }
     }
 }

@@ -68,6 +68,8 @@ public class BluetoothLeService extends Service {
 
     public final static UUID UUID_HEART_RATE_MEASUREMENT =
             UUID.fromString(SampleGattAttributes.HEART_RATE_MEASUREMENT);
+    public final static UUID UUID_BABY_PRESENT_CHAR =
+            UUID.fromString(SampleGattAttributes.BABY_PRESENT_CHAR);
 
     // Implements callback methods for GATT events that the app cares about.  For example,
     // connection change and services discovered.
@@ -142,6 +144,11 @@ public class BluetoothLeService extends Service {
             final int heartRate = characteristic.getIntValue(format, 1);
             Log.d(TAG, String.format("Received heart rate: %d", heartRate));
             intent.putExtra(EXTRA_DATA, String.valueOf(heartRate));
+        } else if (UUID_BABY_PRESENT_CHAR.equals(characteristic.getUuid())){
+            final byte[] data = characteristic.getValue();
+            final int babyPresent = data[0];
+            Log.d(TAG, String.format("Received baby present: %d", babyPresent));
+            intent.putExtra(EXTRA_DATA, String.valueOf(babyPresent));
         } else {
             // For all other profiles, writes the data formatted in HEX.
             final byte[] data = characteristic.getValue();
@@ -282,6 +289,7 @@ public class BluetoothLeService extends Service {
             Log.w(TAG, "BluetoothAdapter not initialized");
             return;
         }
+        Log.d(TAG, "Reading characteristic...");
         mBluetoothGatt.readCharacteristic(characteristic);
     }
 
@@ -297,7 +305,15 @@ public class BluetoothLeService extends Service {
             Log.w(TAG, "BluetoothAdapter not initialized");
             return;
         }
+        Log.d(TAG, "setCharacteristicNotification");
         mBluetoothGatt.setCharacteristicNotification(characteristic, enabled);
+
+        /*if (UUID_BABY_PRESENT_CHAR.equals(characteristic.getUuid())) {
+            BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
+                    UUID.fromString(SampleGattAttributes.BABY_PRESENT_DESCRIPTOR));
+            descriptor.setValue(enabled ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE : new byte[]{0x00, 0x00});
+            mBluetoothGatt.writeDescriptor(descriptor); //descriptor write operation successfully started?
+        }*/
 
         // This is specific to Heart Rate Measurement.
         if (UUID_HEART_RATE_MEASUREMENT.equals(characteristic.getUuid())) {
@@ -318,38 +334,6 @@ public class BluetoothLeService extends Service {
         if (mBluetoothGatt == null) return null;
 
         return mBluetoothGatt.getServices();
-    }
-
-    // Launch the alert to ask if ok
-    private void launchAlert(){
-        final AlertDialog alertViewer = new AlertDialog.Builder(BluetoothLeService.this).create();
-        alertViewer.setTitle("Baby Detected");
-        alertViewer.setMessage("You may have left someone behind!");
-        // make a 10 second countdown timer
-        final CountDownTimer checkin = new CountDownTimer(10000, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-            }
-
-            @Override
-            public void onFinish() {
-                alertViewer.dismiss();
-                ////sendSMS(phoneNumber, lastmessage);
-            }
-        };
-        checkin.start();
-
-        // set dialog message
-        alertViewer.setButton(AlertDialog.BUTTON_NEUTRAL, "Everything's fine!",
-                new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.dismiss();
-                        //sendSMS(phoneNumber, okmessage);
-                        //ESCALATE IF NOT?
-                        checkin.cancel();
-                    }
-                });
-        alertViewer.show();
     }
 
 }
